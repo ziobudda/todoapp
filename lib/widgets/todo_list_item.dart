@@ -17,6 +17,8 @@ class TodoListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isCompleted = todo.stato == TodoStatus.completato;
+
     return Card(
       child: InkWell(
         onTap: onTap,
@@ -31,14 +33,11 @@ class TodoListItem extends StatelessWidget {
                   Expanded(
                     child: Text(
                       todo.testo,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            decoration: todo.stato == TodoStatus.completato
-                                ? TextDecoration.lineThrough
-                                : null,
-                          ),
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
-                  _buildStatusIcon(),
+                  // Mostra l'icona di stato solo se il todo non è completato
+                  if (!isCompleted) _buildStatusIcon(),
                 ],
               ),
               const SizedBox(height: 4),
