@@ -6,6 +6,10 @@ import 'package:provider/provider.dart';
 import '../models/todo_item.dart';
 import '../providers/todo_provider.dart';
 import '../widgets/todo_list_item.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../services/platform_service.dart';
 
 class TodoHomePage extends StatefulWidget {
   const TodoHomePage({Key? key}) : super(key: key);
@@ -46,22 +50,72 @@ class _TodoHomePageState extends State<TodoHomePage> {
                 onTap: () async {
                   final csvData =
                       await context.read<TodoProvider>().exportToCsv();
-                  if (context.mounted) {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Export Completato'),
-                        content: const Text(
-                          'I TODO sono stati esportati correttamente in formato CSV.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('OK'),
+                  if (csvData != null && context.mounted) {
+                    try {
+                      // Verifica i permessi in base alla piattaforma
+                      final hasPermission =
+                          await PlatformService.checkStoragePermission();
+
+                      if (!hasPermission) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Permesso di scrittura negato'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                        return;
+                      }
+
+                      // Gestione del salvataggio specifica per piattaforma
+                      String? outputFile;
+
+                      if (Platform.isAndroid) {
+                        // Su Android, usa la directory dei download
+                        final dir = Directory('/storage/emulated/0/Download');
+                        if (!await dir.exists()) {
+                          await dir.create(recursive: true);
+                        }
+                        final fileName =
+                            'todo_export_${DateTime.now().toString().split(' ')[0]}.csv';
+                        outputFile = '${dir.path}/$fileName';
+                      } else {
+                        // Su altre piattaforme (iOS, Windows, macOS, Linux) usa il file picker
+                        outputFile = await FilePicker.platform.saveFile(
+                          dialogTitle: 'Salva il file CSV',
+                          fileName:
+                              'todo_export_${DateTime.now().toString().split(' ')[0]}.csv',
+                          type: FileType.custom,
+                          allowedExtensions: ['csv'],
+                        );
+                      }
+
+                      if (outputFile != null && context.mounted) {
+                        // Salva il file
+                        final file = File(outputFile);
+                        await file.writeAsString(csvData);
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(Platform.isAndroid
+                                ? 'File salvato in Download'
+                                : 'Export completato con successo'),
+                            duration: const Duration(seconds: 2),
                           ),
-                        ],
-                      ),
-                    );
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                                'Errore durante il salvataggio: ${e.toString()}'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
                   }
                 },
               ),
