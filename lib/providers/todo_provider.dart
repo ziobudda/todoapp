@@ -1,5 +1,3 @@
-// providers/todo_provider.dart
-
 import 'package:flutter/foundation.dart';
 import '../models/todo_item.dart';
 import '../services/database_helper.dart';
@@ -48,7 +46,12 @@ class TodoProvider with ChangeNotifier {
   Future<void> addTodo(TodoItem todo) async {
     try {
       _error = null;
-      final newTodo = todo.copyWith(peso: _todos.length);
+      // Ottiene il peso massimo attuale dei TODO in corso e aggiunge 1
+      final maxPeso = _todos
+          .where((t) => t.stato == TodoStatus.inCorso)
+          .fold(0, (max, todo) => todo.peso > max ? todo.peso : max);
+      final newTodo = todo.copyWith(peso: maxPeso + 1);
+
       final id = await _dbHelper.insertTodo(newTodo);
       final createdTodo = newTodo.copyWith(id: id);
       _todos.add(createdTodo);
@@ -89,6 +92,19 @@ class TodoProvider with ChangeNotifier {
       _error = null;
       await _dbHelper.deleteTodo(id);
       _todos.removeWhere((todo) => todo.id == id);
+
+      // Ricalcola i pesi dei TODO in corso dopo l'eliminazione
+      final activeTodos = _todos
+          .where((todo) => todo.stato == TodoStatus.inCorso)
+          .toList()
+        ..sort((a, b) => a.peso.compareTo(b.peso));
+
+      for (var i = 0; i < activeTodos.length; i++) {
+        final updatedTodo = activeTodos[i].copyWith(peso: i);
+        await _dbHelper.updateTodo(updatedTodo);
+      }
+
+      await loadTodos();
       notifyListeners();
     } catch (e) {
       _error = 'Errore nell\'eliminazione del TODO: ${e.toString()}';
@@ -102,9 +118,11 @@ class TodoProvider with ChangeNotifier {
     try {
       _error = null;
 
-      // Ottieni solo i TODO in corso per l'ordinamento
-      final activeTodos =
-          _todos.where((todo) => todo.stato == TodoStatus.inCorso).toList();
+      // Ottieni solo i TODO in corso
+      final activeTodos = _todos
+          .where((todo) => todo.stato == TodoStatus.inCorso)
+          .toList()
+        ..sort((a, b) => a.peso.compareTo(b.peso));
 
       if (oldIndex < newIndex) {
         newIndex -= 1;
@@ -113,16 +131,17 @@ class TodoProvider with ChangeNotifier {
       final TodoItem item = activeTodos.removeAt(oldIndex);
       activeTodos.insert(newIndex, item);
 
-      // Aggiorna i pesi di tutti i TODO attivi
+      // Aggiorna i pesi di tutti i TODO attivi in modo sequenziale
       for (var i = 0; i < activeTodos.length; i++) {
-        activeTodos[i] = activeTodos[i].copyWith(peso: i);
-        await _dbHelper.updateTodo(activeTodos[i]);
+        final updatedTodo = activeTodos[i].copyWith(
+          peso: i,
+          dataUltimaModifica: DateTime.now(),
+        );
+        await _dbHelper.updateTodo(updatedTodo);
       }
 
       // Ricarica la lista completa per vedere gli aggiornamenti
       await loadTodos();
-
-      notifyListeners();
     } catch (e) {
       _error = 'Errore nel riordinamento dei TODO: ${e.toString()}';
       notifyListeners();
@@ -131,24 +150,19 @@ class TodoProvider with ChangeNotifier {
     }
   }
 
-  // Cambia lo stato di visualizzazione dei TODO archiviati
   void toggleArchived() {
     _includeArchived = !_includeArchived;
     loadTodos();
   }
 
-  // Filtra i TODO per stato
   List<TodoItem> getTodosByStatus(TodoStatus status) {
     return _todos.where((todo) => todo.stato == status).toList();
   }
 
-  // Ottiene le statistiche dei TODO
   Map<String, dynamic> getStatistics() {
     final total = _todos.length;
-    final completed =
-        _todos.where((todo) => todo.stato == TodoStatus.completato).length;
-    final inProgress =
-        _todos.where((todo) => todo.stato == TodoStatus.inCorso).length;
+    final completed = _todos.where((todo) => todo.stato == TodoStatus.completato).length;
+    final inProgress = _todos.where((todo) => todo.stato == TodoStatus.inCorso).length;
     final totalHours = _todos.fold(0.0, (sum, todo) => sum + todo.oreLavorate);
 
     return {
@@ -163,7 +177,6 @@ class TodoProvider with ChangeNotifier {
   Future<String?> exportToCsv() async {
     if (_todos.isEmpty) return null;
 
-    // Intestazioni CSV
     final headers = [
       'ID',
       'Testo',
@@ -172,20 +185,21 @@ class TodoProvider with ChangeNotifier {
       'Data Creazione',
       'Data Inserimento',
       'Data Chiusura',
-      'Ultima Modifica'
+      'Ultima Modifica',
+      'Peso'
     ].join(',');
 
-    // Righe dati
     final rows = _todos.map((todo) => [
-          todo.id,
-          '"${todo.testo.replaceAll('"', '""')}"', // Gestisce le virgolette nel testo
-          _getStatusLabel(todo.stato),
-          todo.oreLavorate,
-          todo.dataCreazione.toIso8601String(),
-          todo.dataInserimento.toIso8601String(),
-          todo.dataChiusura?.toIso8601String() ?? '',
-          todo.dataUltimaModifica.toIso8601String()
-        ].join(','));
+      todo.id,
+      '"${todo.testo.replaceAll('"', '""')}"',
+      _getStatusLabel(todo.stato),
+      todo.oreLavorate,
+      todo.dataCreazione.toIso8601String(),
+      todo.dataInserimento.toIso8601String(),
+      todo.dataChiusura?.toIso8601String() ?? '',
+      todo.dataUltimaModifica.toIso8601String(),
+      todo.peso
+    ].join(','));
 
     final csvContent = [headers, ...rows].join('\n');
     return csvContent;
@@ -202,7 +216,6 @@ class TodoProvider with ChangeNotifier {
     }
   }
 
-  // Pulisce i dati in memoria quando il provider viene distrutto
   @override
   void dispose() {
     _todos.clear();

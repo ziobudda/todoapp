@@ -81,17 +81,17 @@ class DatabaseHelper {
   }
 
   Future<List<TodoItem>> getTodos({bool includeArchived = false}) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      todoTable,
-      where: includeArchived ? null : 'stato != ?',
-      whereArgs: includeArchived ? null : [TodoStatus.archiviato.index],
-      orderBy:
-          'CASE WHEN stato = ${TodoStatus.inCorso.index} THEN peso ELSE dataUltimaModifica END ASC',
-    );
+      final db = await database;
+      final List<Map<String, dynamic>> maps = await db.query(
+        todoTable,
+        where: includeArchived ? null : 'stato != ?',
+        whereArgs: includeArchived ? null : [TodoStatus.archiviato.index],
+        // Ordina per peso in ordine decrescente per i TODO in corso
+        orderBy: 'CASE WHEN stato = ${TodoStatus.inCorso.index} THEN peso ELSE dataUltimaModifica END DESC',
+      );
 
-    return List.generate(maps.length, (i) => TodoItem.fromMap(maps[i]));
-  }
+      return List.generate(maps.length, (i) => TodoItem.fromMap(maps[i]));
+    }
 
   Future<TodoItem?> getTodoById(int id) async {
     final db = await database;

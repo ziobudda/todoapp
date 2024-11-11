@@ -40,7 +40,8 @@ dependencies:
   path_provider: ^2.1.1  # Per la gestione dei percorsi del filesystem
   file_picker: ^6.1.1  # Per la selezione del percorso di salvataggio
   permission_handler: ^11.0.1  # Per gestire i permessi di scrittura
-  
+  speech_to_text: ^6.6.0  # Aggiunto per il riconoscimento vocale
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
