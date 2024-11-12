@@ -23,10 +23,10 @@ class TodoProvider with ChangeNotifier {
 
       _todos = await _dbHelper.getTodos(includeArchived: _includeArchived);
 
-      // Ordina prima per peso (solo per i TODO in corso) e poi per data
+      // Ordina prima per peso (decrescente per i TODO in corso) e poi per data
       _todos.sort((a, b) {
         if (a.stato == TodoStatus.inCorso && b.stato == TodoStatus.inCorso) {
-          return a.peso.compareTo(b.peso);
+          return b.peso.compareTo(a.peso); // Ordine decrescente dei pesi
         } else {
           return b.dataUltimaModifica.compareTo(a.dataUltimaModifica);
         }
@@ -46,15 +46,20 @@ class TodoProvider with ChangeNotifier {
   Future<void> addTodo(TodoItem todo) async {
     try {
       _error = null;
-      // Ottiene il peso massimo attuale dei TODO in corso e aggiunge 1
-      final maxPeso = _todos
-          .where((t) => t.stato == TodoStatus.inCorso)
-          .fold(0, (max, todo) => todo.peso > max ? todo.peso : max);
-      final newTodo = todo.copyWith(peso: maxPeso + 1);
+      // Ottieni i TODO in corso
+      final activeTodos = _todos.where((t) => t.stato == TodoStatus.inCorso).toList();
+      // Il nuovo TODO avrà peso pari alla lunghezza della lista (sarà l'ultimo)
+      final newTodo = todo.copyWith(peso: 0);
+
+      // Aggiorna i pesi di tutti i TODO esistenti
+      for (var i = 0; i < activeTodos.length; i++) {
+        final updatedTodo = activeTodos[i].copyWith(peso: i + 1);
+        await _dbHelper.updateTodo(updatedTodo);
+      }
 
       final id = await _dbHelper.insertTodo(newTodo);
       final createdTodo = newTodo.copyWith(id: id);
-      _todos.add(createdTodo);
+      await loadTodos(); // Ricarica per mantenere l'ordinamento corretto
       notifyListeners();
     } catch (e) {
       _error = 'Errore nell\'aggiunta del TODO: ${e.toString()}';
@@ -92,18 +97,12 @@ class TodoProvider with ChangeNotifier {
       _error = null;
       await _dbHelper.deleteTodo(id);
       _todos.removeWhere((todo) => todo.id == id);
-
-      // Ricalcola i pesi dei TODO in corso dopo l'eliminazione
-      final activeTodos = _todos
-          .where((todo) => todo.stato == TodoStatus.inCorso)
-          .toList()
-        ..sort((a, b) => a.peso.compareTo(b.peso));
-
+      // Riordina i pesi dopo l'eliminazione
+      final activeTodos = _todos.where((todo) => todo.stato == TodoStatus.inCorso).toList();
       for (var i = 0; i < activeTodos.length; i++) {
-        final updatedTodo = activeTodos[i].copyWith(peso: i);
+        final updatedTodo = activeTodos[i].copyWith(peso: activeTodos.length - i - 1);
         await _dbHelper.updateTodo(updatedTodo);
       }
-
       await loadTodos();
       notifyListeners();
     } catch (e) {
@@ -118,30 +117,41 @@ class TodoProvider with ChangeNotifier {
     try {
       _error = null;
 
-      // Ottieni solo i TODO in corso
-      final activeTodos = _todos
-          .where((todo) => todo.stato == TodoStatus.inCorso)
-          .toList()
-        ..sort((a, b) => a.peso.compareTo(b.peso));
+      // Ottieni solo i TODO in corso per l'ordinamento
+      final activeTodos = _todos.where((todo) => todo.stato == TodoStatus.inCorso).toList()
+        ..sort((a, b) => b.peso.compareTo(a.peso)); // Ordina per peso decrescente
 
+      // Aggiusta l'indice se necessario
       if (oldIndex < newIndex) {
         newIndex -= 1;
       }
 
+      // Sposta l'elemento nella nuova posizione
       final TodoItem item = activeTodos.removeAt(oldIndex);
       activeTodos.insert(newIndex, item);
 
-      // Aggiorna i pesi di tutti i TODO attivi in modo sequenziale
+      // Ricalcola i pesi per tutti i todo attivi
+      // L'elemento in posizione 0 avrà il peso più alto
+      final int maxWeight = activeTodos.length - 1;
+
+      // Aggiorna i pesi di tutti i TODO
       for (var i = 0; i < activeTodos.length; i++) {
-        final updatedTodo = activeTodos[i].copyWith(
-          peso: i,
-          dataUltimaModifica: DateTime.now(),
-        );
-        await _dbHelper.updateTodo(updatedTodo);
+        final currentTodo = activeTodos[i];
+        final newWeight = maxWeight - i; // Il primo elemento avrà peso = maxWeight
+
+        // Aggiorna solo se il peso è effettivamente cambiato
+        if (currentTodo.peso != newWeight) {
+          final updatedTodo = currentTodo.copyWith(
+            peso: newWeight,
+            dataUltimaModifica: DateTime.now(),
+          );
+          await _dbHelper.updateTodo(updatedTodo);
+        }
       }
 
       // Ricarica la lista completa per vedere gli aggiornamenti
       await loadTodos();
+      notifyListeners();
     } catch (e) {
       _error = 'Errore nel riordinamento dei TODO: ${e.toString()}';
       notifyListeners();
@@ -150,15 +160,18 @@ class TodoProvider with ChangeNotifier {
     }
   }
 
+  // Cambia lo stato di visualizzazione dei TODO archiviati
   void toggleArchived() {
     _includeArchived = !_includeArchived;
     loadTodos();
   }
 
+  // Filtra i TODO per stato
   List<TodoItem> getTodosByStatus(TodoStatus status) {
     return _todos.where((todo) => todo.stato == status).toList();
   }
 
+  // Ottiene le statistiche dei TODO
   Map<String, dynamic> getStatistics() {
     final total = _todos.length;
     final completed = _todos.where((todo) => todo.stato == TodoStatus.completato).length;
@@ -177,6 +190,7 @@ class TodoProvider with ChangeNotifier {
   Future<String?> exportToCsv() async {
     if (_todos.isEmpty) return null;
 
+    // Intestazioni CSV
     final headers = [
       'ID',
       'Testo',
@@ -189,17 +203,18 @@ class TodoProvider with ChangeNotifier {
       'Peso'
     ].join(',');
 
+    // Righe dati
     final rows = _todos.map((todo) => [
-      todo.id,
-      '"${todo.testo.replaceAll('"', '""')}"',
-      _getStatusLabel(todo.stato),
-      todo.oreLavorate,
-      todo.dataCreazione.toIso8601String(),
-      todo.dataInserimento.toIso8601String(),
-      todo.dataChiusura?.toIso8601String() ?? '',
-      todo.dataUltimaModifica.toIso8601String(),
-      todo.peso
-    ].join(','));
+          todo.id,
+          '"${todo.testo.replaceAll('"', '""')}"', // Gestisce le virgolette nel testo
+          _getStatusLabel(todo.stato),
+          todo.oreLavorate,
+          todo.dataCreazione.toIso8601String(),
+          todo.dataInserimento.toIso8601String(),
+          todo.dataChiusura?.toIso8601String() ?? '',
+          todo.dataUltimaModifica.toIso8601String(),
+          todo.peso
+        ].join(','));
 
     final csvContent = [headers, ...rows].join('\n');
     return csvContent;
@@ -216,6 +231,7 @@ class TodoProvider with ChangeNotifier {
     }
   }
 
+  // Pulisce i dati in memoria quando il provider viene distrutto
   @override
   void dispose() {
     _todos.clear();

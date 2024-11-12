@@ -247,94 +247,100 @@ class _TodoHomePageState extends State<TodoHomePage> {
           } else {
             // Lista dei TODO attivi con swipe per completare e riordinamento
             return ReorderableListView.builder(
-              buildDefaultDragHandles: false,
-              padding: const EdgeInsets.all(8),
-              itemCount: todos.length,
-              onReorder: (oldIndex, newIndex) {
-                todoProvider.reorderTodo(oldIndex, newIndex);
-              },
-              itemBuilder: (context, index) {
-                final todo = todos[index];
-                return ReorderableDragStartListener(
-                  key: ValueKey(todo.id),
-                  index: index,
-                  child: Dismissible(
-                    key: ValueKey("${todo.id}_dismissible"),
-                    confirmDismiss: (direction) async {
-                      await HapticFeedback.mediumImpact();
-                      return true;
-                    },
-                    background: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: const Icon(
-                        Icons.check_circle,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                    ),
-                    secondaryBackground: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: const Icon(
-                        Icons.check_circle,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                    ),
-                    onDismissed: (_) {
-                      final updatedTodo = todo.copyWith(
-                        stato: TodoStatus.completato,
-                        dataUltimaModifica: DateTime.now(),
-                        dataChiusura: DateTime.now(),
-                      );
-                      todoProvider.updateTodo(updatedTodo);
+                     padding: const EdgeInsets.all(8),
+                     itemCount: todos.length,
+                     onReorder: (oldIndex, newIndex) {
+                       todoProvider.reorderTodo(oldIndex, newIndex);
+                     },
+                     proxyDecorator: (child, index, animation) { // Aggiungi decorazione durante il drag
+                       return Material(
+                         elevation: 4,
+                         child: child,
+                       );
+                     },
+                     itemBuilder: (context, index) {
+                       final todo = todos[index];
+                       return Dismissible(
+                         key: ValueKey("${todo.id}_dismissible"),
+                         confirmDismiss: (direction) async {
+                           await HapticFeedback.mediumImpact();
+                           return true;
+                         },
+                         background: Container(
+                           margin: const EdgeInsets.symmetric(vertical: 4),
+                           decoration: BoxDecoration(
+                             color: Colors.green,
+                             borderRadius: BorderRadius.circular(12),
+                           ),
+                           alignment: Alignment.centerLeft,
+                           padding: const EdgeInsets.symmetric(horizontal: 20),
+                           child: const Icon(
+                             Icons.check_circle,
+                             color: Colors.white,
+                             size: 28,
+                           ),
+                         ),
+                         secondaryBackground: Container(
+                           margin: const EdgeInsets.symmetric(vertical: 4),
+                           decoration: BoxDecoration(
+                             color: Colors.green,
+                             borderRadius: BorderRadius.circular(12),
+                           ),
+                           alignment: Alignment.centerRight,
+                           padding: const EdgeInsets.symmetric(horizontal: 20),
+                           child: const Icon(
+                             Icons.check_circle,
+                             color: Colors.white,
+                             size: 28,
+                           ),
+                         ),
+                         onDismissed: (_) {
+                           final updatedTodo = todo.copyWith(
+                             stato: TodoStatus.completato,
+                             dataUltimaModifica: DateTime.now(),
+                             dataChiusura: DateTime.now(),
+                           );
+                           todoProvider.updateTodo(updatedTodo);
 
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('TODO completato'),
-                          duration: const Duration(seconds: 2),
-                          action: SnackBarAction(
-                            label: 'Annulla',
-                            onPressed: () {
-                              final revertedTodo = todo.copyWith(
-                                stato: TodoStatus.inCorso,
-                                dataUltimaModifica: todo.dataUltimaModifica,
-                                dataChiusura: null,
-                              );
-                              todoProvider.updateTodo(revertedTodo);
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: TodoListItem(
-                        todo: todo,
-                        onTap: () {
-                          Navigator.pushNamed(
-                            context,
-                            '/edit-todo',
-                            arguments: todo,
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                );
-              },
-            );
+                           ScaffoldMessenger.of(context).showSnackBar(
+                             SnackBar(
+                               content: const Text('TODO completato'),
+                               duration: const Duration(seconds: 2),
+                               action: SnackBarAction(
+                                 label: 'Annulla',
+                                 onPressed: () {
+                                   final revertedTodo = todo.copyWith(
+                                     stato: TodoStatus.inCorso,
+                                     dataUltimaModifica: todo.dataUltimaModifica,
+                                     dataChiusura: null,
+                                   );
+                                   todoProvider.updateTodo(revertedTodo);
+                                 },
+                               ),
+                             ),
+                           );
+                         },
+                         child: ReorderableDelayedDragStartListener( // Cambiato qui
+                           key: ValueKey(todo.id),
+                           index: index,
+                           child: Padding(
+                             padding: const EdgeInsets.symmetric(vertical: 4),
+                             child: TodoListItem(
+                               todo: todo,
+                               onTap: () {
+                                 Navigator.pushNamed(
+                                   context,
+                                   '/edit-todo',
+                                   arguments: todo,
+                                 );
+                               },
+                             ),
+                           ),
+                         ),
+                       );
+                     },
+                   );
+
           }
         },
       ),
