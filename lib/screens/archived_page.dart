@@ -14,6 +14,8 @@ class ArchivedPage extends StatefulWidget {
 }
 
 class _ArchivedPageState extends State<ArchivedPage> {
+  bool _showCompleted = false;
+
   @override
   void initState() {
     super.initState();
@@ -38,10 +40,43 @@ class _ArchivedPageState extends State<ArchivedPage> {
       appBar: AppBar(
         title: const Text('TODO Archiviati'),
       ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _showCompleted ? 1 : 0,
+        onTap: (index) {
+          switch (index) {
+            case 0:
+              setState(() => _showCompleted = false);
+              break;
+            case 1:
+              setState(() => _showCompleted = true);
+              break;
+            case 2:
+              Navigator.pushNamed(context, '/add-todo');
+              break;
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.pending_actions_outlined),
+            label: 'Da Fare',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.task_alt_outlined),
+            label: 'Completati',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.add_circle_outline),
+            label: 'Nuovo',
+          ),
+        ],
+      ),
       body: Consumer<TodoProvider>(
         builder: (context, todoProvider, child) {
           final archivedTodos = todoProvider.todos
-              .where((todo) => todo.stato == TodoStatus.archiviato)
+              .where((todo) =>
+                  todo.stato == TodoStatus.archiviato &&
+                  (todo.stato == (_showCompleted ? TodoStatus.completato : TodoStatus.inCorso))
+              )
               .toList();
 
           if (archivedTodos.isEmpty) {
