@@ -63,12 +63,17 @@ class _TodoFormPageState extends State<TodoFormPage> {
 
       // Get the list of available locales
       final locales = await _speechToText.locales();
+        for (var local in locales) {
+              debugPrint(local.name);
+              debugPrint(local.localeId);
+            }
 
       // Try to find Italian locale
       final italianLocale = locales.firstWhere(
         (locale) => locale.localeId.startsWith('it_'),
         orElse: () => locales.first, // Fallback to first available locale
       );
+
 
       setState(() {
         _speechEnabled = true;
@@ -450,23 +455,39 @@ class _TodoFormPageState extends State<TodoFormPage> {
                 return null;
               },
             ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: _salvaTodo,
-              icon: Icon(_isModifica ? Icons.save : Icons.add),
-              label: Text(
-                _isModifica ? 'Salva modifiche' : 'Crea TODO',
-                style: const TextStyle(fontSize: 16),
-                            ),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 12,
-                                ),
-                              ),
-                            ),
+
                           ],
                         ),
+                      ),
+                      bottomNavigationBar: BottomNavigationBar(
+                        currentIndex: 0,
+                        onTap: (index) {
+                          if (index == 0) {
+                            _salvaTodo();
+                          } else {
+                            Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+                          }
+                        },
+                        items: [
+                          BottomNavigationBarItem(
+                            icon: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.save,
+                                color: Colors.white,
+                              ),
+                            ),
+                            label: 'Salva',
+                          ),
+                          const BottomNavigationBarItem(
+                            icon: Icon(Icons.home),
+                            label: 'Home',
+                          ),
+                        ],
                       ),
                       bottomSheet: _isListening
                         ? Container(
